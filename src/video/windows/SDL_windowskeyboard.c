@@ -589,9 +589,6 @@ static void IME_InputLangChanged(SDL_VideoData *videodata)
 {
     UINT lang = PRIMLANG();
     IME_UpdateInputLocale(videodata);
-    if (!videodata->ime_uiless) {
-        videodata->ime_candlistindexbase = (videodata->ime_hkl == CHT_HKL_DAYI) ? 0 : 1;
-    }
 
     IME_SetupAPI(videodata);
     if (lang != PRIMLANG()) {
@@ -737,6 +734,9 @@ static void IME_UpdateInputLocale(SDL_VideoData *videodata)
 
     videodata->ime_hkl = hklnext;
     // videodata->ime_candvertical = (PRIMLANG() == LANG_KOREAN || LANG() == LANG_CHS) ? SDL_FALSE : SDL_TRUE;
+    if (!videodata->ime_uiless) {
+        videodata->ime_candlistindexbase = (videodata->ime_hkl == CHT_HKL_DAYI) ? 0 : 1;
+    }
 }
 
 static void IME_ClearComposition(SDL_VideoData *videodata)
