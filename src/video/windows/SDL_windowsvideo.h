@@ -426,6 +426,7 @@ struct SDL_VideoData
     int ime_candlistindexbase;
     SDL_bool ime_candvertical;
 
+    SDL_Texture *ime_candtex;
     SDL_bool ime_dirty;
     SDL_Rect ime_rect;
     SDL_Rect ime_candlistrect;

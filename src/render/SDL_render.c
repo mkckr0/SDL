@@ -31,6 +31,11 @@
 #include "../core/android/SDL_android.h"
 #endif
 
+#ifdef SDL_VIDEO_DRIVER_WINDOWS
+#include "../video/windows/SDL_windowsvideo.h"
+void IME_Present(SDL_Window *window);
+#endif
+
 /* as a courtesy to iOS apps, we don't try to draw when in the background, as
 that will crash the app. However, these apps _should_ have used
 SDL_AddEventWatch to catch SDL_EVENT_WILL_ENTER_BACKGROUND events and stopped
@@ -3989,6 +3994,10 @@ static void SDL_SimulateRenderVSync(SDL_Renderer *renderer)
 int SDL_RenderPresent(SDL_Renderer *renderer)
 {
     SDL_bool presented = SDL_TRUE;
+
+#ifdef SDL_VIDEO_DRIVER_WINDOWS
+    IME_Present(renderer->window);
+#endif
 
     CHECK_RENDERER_MAGIC(renderer, -1);
 

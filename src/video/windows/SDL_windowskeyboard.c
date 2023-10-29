@@ -77,6 +77,7 @@ void WIN_InitKeyboard(SDL_VideoDevice *_this)
     data->ime_candlistindexbase = 0;
     data->ime_candvertical = SDL_TRUE;
 
+    data->ime_candtex = NULL;
     data->ime_dirty = SDL_FALSE;
     SDL_memset(&data->ime_rect, 0, sizeof(data->ime_rect));
     SDL_memset(&data->ime_candlistrect, 0, sizeof(data->ime_candlistrect));
@@ -287,7 +288,7 @@ SDL_bool IME_HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM *lParam, S
     return SDL_FALSE;
 }
 
-void IME_Present(SDL_VideoData *videodata)
+void IME_Present(SDL_Window *window)
 {
 }
 
@@ -735,7 +736,7 @@ static void IME_UpdateInputLocale(SDL_VideoData *videodata)
     }
 
     videodata->ime_hkl = hklnext;
-    videodata->ime_candvertical = (PRIMLANG() == LANG_KOREAN || LANG() == LANG_CHS) ? SDL_FALSE : SDL_TRUE;
+    // videodata->ime_candvertical = (PRIMLANG() == LANG_KOREAN || LANG() == LANG_CHS) ? SDL_FALSE : SDL_TRUE;
 }
 
 static void IME_ClearComposition(SDL_VideoData *videodata)
@@ -1472,6 +1473,10 @@ static void DrawRect(HDC hdc, int left, int top, int right, int bottom, int pens
 
 static void IME_DestroyTextures(SDL_VideoData *videodata)
 {
+    if (videodata->ime_candtex) {
+        SDL_DestroyTexture(videodata->ime_candtex);
+        videodata->ime_candtex = NULL;
+    }
 }
 
 #define SDL_swap(a, b) \
@@ -1552,15 +1557,18 @@ static void IME_PositionCandidateList(SDL_VideoData *videodata, SIZE size)
     videodata->ime_candlistrect.h = bottom - top;
 }
 
-static void IME_RenderCandidateList(SDL_VideoData *videodata, HDC hdc)
+static void IME_RenderCandidateList(SDL_Renderer* renderer, SDL_VideoData *videodata)
 {
     int i, j;
     SIZE size = { 0 };
     SIZE candsizes[MAX_CANDLIST];
     SIZE maxcandsize = { 0 };
     HBITMAP hbm = NULL;
+    BITMAP bm;
     int candcount = SDL_min(SDL_min(MAX_CANDLIST, videodata->ime_candcount), videodata->ime_candpgsize);
     SDL_bool vertical = videodata->ime_candvertical;
+    BYTE* pixels;
+    SDL_Surface* surface;
 
     const int listborder = 1;
     const int listpadding = 0;
@@ -1577,6 +1585,8 @@ static void IME_RenderCandidateList(SDL_VideoData *videodata, HDC hdc)
     const COLORREF selfillcolor = RGB(0xD2, 0xE6, 0xFF);
     const COLORREF seltextcolor = RGB(0, 0, 0);
     const int horzcandspacing = 5;
+
+    HDC hdc = CreateCompatibleDC(NULL);
 
     HPEN listpen = listborder != 0 ? CreatePen(PS_SOLID, listborder, listbordercolor) : (HPEN)GetStockObject(NULL_PEN);
     HBRUSH listbrush = CreateSolidBrush(listfillcolor);
@@ -1637,7 +1647,7 @@ static void IME_RenderCandidateList(SDL_VideoData *videodata, HDC hdc)
             (maxcandsize.cy);
     }
 
-    StartDrawToBitmap(hdc, &hbm, size.cx, size.cy);
+    pixels = StartDrawToBitmap(hdc, &hbm, size.cx, size.cy);
 
     SelectObject(hdc, listpen);
     SelectObject(hdc, listbrush);
@@ -1682,6 +1692,13 @@ static void IME_RenderCandidateList(SDL_VideoData *videodata, HDC hdc)
         DrawRect(hdc, left, top, right, bottom, candborder);
         ExtTextOutW(hdc, left + candborder + candpadding, top + candborder + candpadding, 0, NULL, s, (int)SDL_wcslen(s), NULL);
     }
+
+    if (GetObject(hbm, sizeof(bm), &bm)) {
+        surface = SDL_CreateSurfaceFrom(pixels, size.cx, size.cy, bm.bmWidthBytes, SDL_PIXELFORMAT_XRGB8888);
+        videodata->ime_candtex = SDL_CreateTextureFromSurface(renderer, surface);
+        SDL_DestroySurface(surface);
+    }
+    
     StopDrawToBitmap(hdc, &hbm);
 
     DeleteObject(listpen);
@@ -1691,30 +1708,35 @@ static void IME_RenderCandidateList(SDL_VideoData *videodata, HDC hdc)
     DeleteObject(selpen);
     DeleteObject(selbrush);
     DeleteObject(font);
+    DeleteDC(hdc);
 
     IME_PositionCandidateList(videodata, size);
 }
 
-static void IME_Render(SDL_VideoData *videodata)
+static void IME_Render(SDL_Renderer* renderer, SDL_VideoData *videodata)
 {
-    HDC hdc = CreateCompatibleDC(NULL);
-
     if (videodata->ime_candlist) {
-        IME_RenderCandidateList(videodata, hdc);
+        IME_RenderCandidateList(renderer, videodata);
     }
-
-    DeleteDC(hdc);
 
     videodata->ime_dirty = SDL_FALSE;
 }
 
-void IME_Present(SDL_VideoData *videodata)
+void IME_Present(SDL_Window *window)
 {
+    SDL_FRect dstrect;
+    SDL_Renderer* renderer = SDL_GetRenderer(window);
+    SDL_VideoData* videodata = window->driverdata->videodata;
+    
     if (videodata->ime_dirty) {
-        IME_Render(videodata);
+        IME_Render(renderer, videodata);
     }
 
-    /* FIXME: Need to show the IME bitmap */
+    dstrect.x = videodata->ime_candlistrect.x;
+    dstrect.y = videodata->ime_candlistrect.y;
+    dstrect.w = videodata->ime_candlistrect.w;
+    dstrect.h = videodata->ime_candlistrect.h;
+    SDL_RenderTexture(renderer, videodata->ime_candtex, NULL, &dstrect);
 }
 
 SDL_bool WIN_IsTextInputShown(SDL_VideoDevice *_this)
